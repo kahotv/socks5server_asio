@@ -2,9 +2,9 @@
 #include <memory>
 #include <optional>
 #include <asio.hpp>
+#include <coroutine>
 #include <asio/experimental/awaitable_operators.hpp>
 #include <asio/experimental/channel.hpp>
-
 using std::move;
 
 using asio::error_code;
@@ -359,7 +359,7 @@ awaitable< std::tuple<error_code, size_t, std::optional<udp::endpoint>>> socks5_
 		if (len <= 22)	//2 + 1 + 1 + 16 + 2 = 22
 			co_return std::tuple(asio::error::invalid_argument, 0, std::nullopt);
 
-		std::copy(buf, buf + 4, addrv6.data());
+		std::copy(buf + 4, buf + 4 + 16, addrv6.data());
 
 		addr = asio::ip::make_address_v6(addrv6);
 		port = ntohs(*(uint16_t*)&buf[4 + 16]);
@@ -492,6 +492,8 @@ awaitable<void> sock5_udpassociate_trans(udp::socket& forward, address cli_addr,
 			auto [e,pos,ep_target] = co_await socks5_udpassociate_handle_client(recv_buf, n);
 			if (!e)
 			{
+				//printf("[sock5_udpassociate_trans] up [%s:%d -> %s:%d]\n", ep_cli.address().to_string().c_str(), ep_cli.port(), ep_target.value().address().to_string().c_str(), ep_target.value().port());
+
 				co_await forward.async_send_to(buffer(recv_buf + pos,n - pos), ep_target.value(), use_awaitable);
 
 				flow_up += n - pos;
@@ -505,6 +507,8 @@ awaitable<void> sock5_udpassociate_trans(udp::socket& forward, address cli_addr,
 		{
 			//来自server，添加头后发给client
 			auto [e,pos] = socks5_udpassociate_handle_server(extra_size, recv_buf, n, sizeof(buf), ep_tmp.address(), ep_tmp.port());
+
+			//printf("[sock5_udpassociate_trans] down [%s:%d -> %s:%d]\n", ep_tmp.address().to_string().c_str(), ep_tmp.port(), ep_cli.address().to_string().c_str(), ep_cli.port());
 
 			co_await forward.async_send_to(buffer(recv_buf - pos, n + pos), ep_cli, use_awaitable);
 
@@ -528,8 +532,19 @@ awaitable<void> socks5_request_udpassociate(tcp::socket sock, address addr, port
 	udp::socket forward(ctx);
 
 	asio::error_code ec;
-	forward.open(udp::v4());
-	if(forward.bind({ udp::v4(), 0 }, ec))
+
+	if (addr.is_v4())
+	{
+		forward.open(udp::v4());
+		forward.bind({ udp::v4(), 0 }, ec);
+	}
+	else 
+	{
+		forward.open(udp::v6());
+		forward.bind({ udp::v6(), 0 }, ec);
+	}
+
+	if(ec)
 	{
 		printf("[socks5_request_connect] udpassociate from %s:%d[%s:%d] 连接断开，总流量[%d],错误信息[%s]\n",
 			sock.remote_endpoint().address().to_string().c_str(),
@@ -540,7 +555,7 @@ awaitable<void> socks5_request_udpassociate(tcp::socket sock, address addr, port
 			ec.message().c_str()
 		);
 		//返回错误信息
-		co_await socks5_request_replay(sock, address_v4::loopback(), forward.local_endpoint().port(), false);
+		co_await socks5_request_replay(sock, forward.local_endpoint().address(), forward.local_endpoint().port(), false);
 		co_return;
 	}
 
@@ -549,14 +564,14 @@ awaitable<void> socks5_request_udpassociate(tcp::socket sock, address addr, port
 	try
 	{
 		//把绑定好的udp端口发回去
-		co_await socks5_request_replay(sock, address_v4::loopback(), forward.local_endpoint().port(), true);
+		co_await socks5_request_replay(sock, forward.local_endpoint().address(), forward.local_endpoint().port(), true);
 
 		printf("[socks5_request_connect] udpassociate from %s:%d[%s:%d] | listen: %s:%d\n",
 			sock.remote_endpoint().address().to_string().c_str(),
 			sock.remote_endpoint().port(),
 			addr.to_string().c_str(),
 			port,
-			address_v4::loopback().to_string().c_str(),
+			forward.local_endpoint().address().to_string().c_str(),
 			forward.local_endpoint().port()
 		);
 
@@ -753,7 +768,11 @@ int main()
 
 	co_spawn(ctx, listener(11808), detached);
 
-	//双线程
+	//多线程转发数据
+	std::thread([&]() {ctx.run(); }).detach();
+	std::thread([&]() {ctx.run(); }).detach();
+	std::thread([&]() {ctx.run(); }).detach();
+	std::thread([&]() {ctx.run(); }).detach();
 	std::thread([&]() {ctx.run(); }).detach();
 	std::thread([&]() {ctx.run(); }).detach();
 	
