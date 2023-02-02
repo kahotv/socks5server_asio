@@ -2,6 +2,8 @@
 
 基于asio (non-boost) + coroutine的socks5服务端
 
+![](test.png)
+
 ## 编译
 - Windows
   - asio  (non-boost)
@@ -10,6 +12,14 @@
   - x86
 
 - Ubuntu
+  - asio(non-boost)
+
+  - g++-10
+
+  - c++20以上
+
+  - x64
+
 
 1. 安装/升级g++-10
 
@@ -62,7 +72,13 @@
    g++ main.cpp -I /root/vcpkg/packages/asio_x64-linux/include/ -fcoroutines -std=c++20 -lpthread
    ```
 
+5. 运行
 
+   ```bash
+   ./a.out
+   ```
+
+   
 
 ## 已实现
 
