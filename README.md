@@ -3,9 +3,63 @@
 基于asio (non-boost) + coroutine的socks5服务端
 
 ## 编译
-- msvc142（vs2019）
-- c++20以上
-- x86
+- Windows
+  - asio  (non-boost)
+  - msvc142（vs2019）
+  - c++20以上
+  - x86
+
+- Ubuntu
+
+1. 安装/升级g++-10
+
+   - 更新源
+
+     ```bash
+     sudo apt-get update
+     sudo apt-get upgrade
+     ```
+
+   - 查看版本
+
+     ```bash
+     gcc --version
+     g++ --version
+     ```
+
+   - 升级版本
+
+     ```bash
+     sudo apt-get update
+     sudo apt-get install gcc-10
+     sudo apt-get install g++-10
+     cd /usr/bin
+     sudo rm gcc g++
+     sudo ln -s gcc-10 gcc
+     sudo ln -s g++-10 g++
+     ```
+
+2. 安装vcpkg
+
+     ```bash
+     sudo apt-get install curl zip unzip tar
+     git clone  https://github.com/microsoft/vcpkg.git
+     cd vcpkg
+     ./bootstrap-vcpkg.sh
+     ```
+
+3. 用vcpkg安装asio:x64-windows
+
+     ```bash
+     ./vcpkg install asio:x64-linux
+     ```
+
+1. 编译
+
+   ```bash
+   g++ main.cpp -I /root/vcpkg/packages/asio_x64-linux/include/ -fcoroutines -std=c++20 -lpthread
+   ```
+
 
 ## 已实现
 

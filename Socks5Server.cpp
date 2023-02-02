@@ -1,8 +1,8 @@
+﻿#include <memory>
 #include <iostream>
-#include <memory>
 #include <optional>
-#include <asio.hpp>
 #include <coroutine>
+#include <asio.hpp>
 #include <asio/experimental/awaitable_operators.hpp>
 #include <asio/experimental/channel.hpp>
 using std::move;
@@ -105,7 +105,7 @@ awaitable<bool> socks5_auth(tcp::socket& sock)
 	std::string uname, passwd;
 
 	//版本号
-	co_await asio::async_read(sock, buffer(buf,1), use_awaitable);
+	co_await asio::async_read(sock, buffer(buf, 1), use_awaitable);
 	if (buf[0] != 0x01)
 		co_return false;
 
@@ -121,7 +121,7 @@ awaitable<bool> socks5_auth(tcp::socket& sock)
 	co_await asio::async_read(sock, buffer(buf, plen), use_awaitable);
 	passwd.assign((const char*)buf, 0, plen);
 
-	printf("[auth] unamelen: %d, passwdlen: %d\n", uname.length(), passwd.length());
+	printf("[auth] unamelen: %zd, passwdlen: %zd\n", uname.length(), passwd.length());
 
 	if (uname != "admin" || passwd != "123456")
 	{
@@ -204,7 +204,7 @@ awaitable<void> socks5_request_replay(tcp::socket& sock, tcp::endpoint&& bind_ep
 
 	co_await asio::async_write(sock, buffer(buf, replay_len), use_awaitable);
 }
-awaitable<void> socks5_request_replay(tcp::socket& sock, address bind_addr,port_type bind_port, bool succ)
+awaitable<void> socks5_request_replay(tcp::socket& sock, address bind_addr, port_type bind_port, bool succ)
 {
 	int replay_len = 0;
 	char buf[0x100];
@@ -234,7 +234,7 @@ awaitable<void> socks5_request_replay(tcp::socket& sock, address bind_addr,port_
 
 	co_await asio::async_write(sock, buffer(buf, replay_len), use_awaitable);
 }
-awaitable<void> socks5_request_connect(tcp::socket sock, address addr,uint16_t port)
+awaitable<void> socks5_request_connect(tcp::socket sock, address addr, uint16_t port)
 {
 	auto ctx = co_await this_coro::executor;
 	tcp::socket server(ctx);
@@ -245,16 +245,17 @@ awaitable<void> socks5_request_connect(tcp::socket sock, address addr,uint16_t p
 		sock.remote_endpoint().port(),
 		remote.address().to_string().c_str(),
 		remote.port()
-		);
+	);
 
 	auto [e] = co_await server.async_connect(remote, asio::as_tuple(use_awaitable));
-	
+
 	if (e)
 	{
 		try
 		{
 			co_await socks5_request_replay(sock, server.local_endpoint(), false);
-		}catch(...){}
+		}
+		catch (...) {}
 
 		printf("[socks5_request_connect] connect %s:%d -> %s:%d 连接断开，总流量[%d],错误信息[%s]\n",
 			sock.remote_endpoint().address().to_string().c_str(),
@@ -280,11 +281,11 @@ awaitable<void> socks5_request_connect(tcp::socket sock, address addr,uint16_t p
 	try
 	{
 		co_await socks5_request_replay(sock, server.local_endpoint(), true);
-		co_await (sock5_trans(sock, server, flow_up) && sock5_trans(server, sock, flow_down));
+		co_await(sock5_trans(sock, server, flow_up) && sock5_trans(server, sock, flow_down));
 	}
 	catch (std::exception e)
 	{
-		printf("[socks5_request_connect] connect %s:%d -> %s:%d 连接断开，总流量[up: %d, down: %d],错误信息[%s]\n",
+		printf("[socks5_request_connect] connect %s:%d -> %s:%d 连接断开，总流量[up: %zd, down: %zd],错误信息[%s]\n",
 			sock.remote_endpoint().address().to_string().c_str(),
 			sock.remote_endpoint().port(),
 			remote.address().to_string().c_str(),
@@ -315,10 +316,10 @@ awaitable< std::tuple<error_code, size_t, std::optional<udp::endpoint>>> socks5_
 {
 	/*
 	  +----+------+------+----------+----------+----------+
-      |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
-      +----+------+------+----------+----------+----------+
-      | 2  |  1   |  1   | Variable |    2     | Variable |
-      +----+------+------+----------+----------+----------+
+	  |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
+	  +----+------+------+----------+----------+----------+
+	  | 2  |  1   |  1   | Variable |    2     | Variable |
+	  +----+------+------+----------+----------+----------+
 	*/
 
 	auto ctx = co_await this_coro::executor;
@@ -378,7 +379,7 @@ awaitable< std::tuple<error_code, size_t, std::optional<udp::endpoint>>> socks5_
 		}
 
 		std::string domain(buf + 5, domain_len);
-		std::string port_str = std::format("{}", ntohs(*(uint16_t*)(buf + 5 + domain_len)));
+		std::string port_str = std::to_string(ntohs(*(uint16_t*)(buf + 5 + domain_len)));
 
 		printf("[socks5_udpassociate_handle_client] domain  %s:%s\n", domain.c_str(), port_str.c_str());
 		//解析域名
@@ -407,15 +408,15 @@ awaitable< std::tuple<error_code, size_t, std::optional<udp::endpoint>>> socks5_
 
 	co_return std::tuple(asio::error_code{}, pos, std::make_optional(ep));
 }
-std::tuple<error_code,size_t> socks5_udpassociate_handle_server(size_t extra_size, char* buf, size_t len, size_t max, address cli_addr, port_type cli_port)
+std::tuple<error_code, size_t> socks5_udpassociate_handle_server(size_t extra_size, char* buf, size_t len, size_t max, address cli_addr, port_type cli_port)
 {
-/*
-  +----+------+------+----------+----------+----------+
-  |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
-  +----+------+------+----------+----------+----------+
-  | 2  |  1   |  1   | Variable |    2     | Variable |
-  +----+------+------+----------+----------+----------+
-*/
+	/*
+	  +----+------+------+----------+----------+----------+
+	  |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
+	  +----+------+------+----------+----------+----------+
+	  | 2  |  1   |  1   | Variable |    2     | Variable |
+	  +----+------+------+----------+----------+----------+
+	*/
 
 	size_t head_size = 2 + 1 + 1 + (cli_addr.is_v4() ? 4 : 16) + 2;
 
@@ -442,7 +443,7 @@ std::tuple<error_code,size_t> socks5_udpassociate_handle_server(size_t extra_siz
 
 		*(uint16_t*)(head + 4 + addrdata.size()) = htons(cli_port);
 	}
-	else 
+	else
 	{
 		head[3] = (uint8_t)socks5AddrType::IPv6;
 
@@ -489,24 +490,24 @@ awaitable<void> sock5_udpassociate_trans(udp::socket& forward, address cli_addr,
 		{
 
 			//来自client，移除头后发给target
-			auto [e,pos,ep_target] = co_await socks5_udpassociate_handle_client(recv_buf, n);
+			auto [e, pos, ep_target] = co_await socks5_udpassociate_handle_client(recv_buf, n);
 			if (!e)
 			{
 				//printf("[sock5_udpassociate_trans] up [%s:%d -> %s:%d]\n", ep_cli.address().to_string().c_str(), ep_cli.port(), ep_target.value().address().to_string().c_str(), ep_target.value().port());
 
-				co_await forward.async_send_to(buffer(recv_buf + pos,n - pos), ep_target.value(), use_awaitable);
+				co_await forward.async_send_to(buffer(recv_buf + pos, n - pos), ep_target.value(), use_awaitable);
 
 				flow_up += n - pos;
 			}
-			else 
+			else
 			{
 				printf("[sock5_udpassociate_trans] from client error [%s]\n", e.message().c_str());
 			}
 		}
-		else 
+		else
 		{
 			//来自server，添加头后发给client
-			auto [e,pos] = socks5_udpassociate_handle_server(extra_size, recv_buf, n, sizeof(buf), ep_tmp.address(), ep_tmp.port());
+			auto [e, pos] = socks5_udpassociate_handle_server(extra_size, recv_buf, n, sizeof(buf), ep_tmp.address(), ep_tmp.port());
 
 			//printf("[sock5_udpassociate_trans] down [%s:%d -> %s:%d]\n", ep_tmp.address().to_string().c_str(), ep_tmp.port(), ep_cli.address().to_string().c_str(), ep_cli.port());
 
@@ -538,13 +539,13 @@ awaitable<void> socks5_request_udpassociate(tcp::socket sock, address addr, port
 		forward.open(udp::v4());
 		forward.bind({ udp::v4(), 0 }, ec);
 	}
-	else 
+	else
 	{
 		forward.open(udp::v6());
 		forward.bind({ udp::v6(), 0 }, ec);
 	}
 
-	if(ec)
+	if (ec)
 	{
 		printf("[socks5_request_connect] udpassociate from %s:%d[%s:%d] 连接断开，总流量[%d],错误信息[%s]\n",
 			sock.remote_endpoint().address().to_string().c_str(),
@@ -582,7 +583,7 @@ awaitable<void> socks5_request_udpassociate(tcp::socket sock, address addr, port
 	}
 	catch (std::exception e)
 	{
-		printf("[socks5_request_connect] udpassociate from %s:%d[%s:%d] 连接断开，总流量[up: %d, down: %d],错误信息[%s]\n",
+		printf("[socks5_request_connect] udpassociate from %s:%d[%s:%d] 连接断开，总流量[up: %zd, down: %zd],错误信息[%s]\n",
 			sock.remote_endpoint().address().to_string().c_str(),
 			sock.remote_endpoint().port(),
 			addr.to_string().c_str(),
@@ -635,7 +636,7 @@ awaitable<void> socks5_request(tcp::socket& sock)
 		{
 			co_await asio::async_read(sock, buffer(buf, 4 + 2), use_awaitable);
 			addr = asio::ip::make_address_v4(ntohl(*(uint32_t*)buf));
-			port = ntohs( *(uint16_t*)&buf[4]);
+			port = ntohs(*(uint16_t*)&buf[4]);
 		}
 		break;
 	case socks5AddrType::IPv6:
@@ -662,7 +663,7 @@ awaitable<void> socks5_request(tcp::socket& sock)
 			co_await asio::async_read(sock, buffer(buf, domain_len), use_awaitable);
 			std::string domain(buf, 0, domain_len);
 			co_await asio::async_read(sock, buffer(buf, 2), use_awaitable);
-			std::string port_str = std::format("{}", ntohs(*(uint16_t*)buf));
+			std::string port_str = std::to_string(ntohs(*(uint16_t*)buf));
 
 			printf("[sock5_request] connect domain  %s:%s\n", domain.c_str(), port_str.c_str());
 			//解析域名
@@ -696,11 +697,11 @@ awaitable<void> socks5_request(tcp::socket& sock)
 	{
 		co_await socks5_request_udpassociate(move(sock), addr, port);
 	}
-	else 
+	else
 	{
 		throw asio::error::invalid_argument;
 	}
-	
+
 }
 awaitable<void> socks5_handler(tcp::socket client)
 {
@@ -738,7 +739,7 @@ awaitable<void> socks5_handler(tcp::socket client)
 		co_await replaySelectMethod(client, (uint8_t)socks5Method::NoAuth);
 		printf("选择认证模式: [NoAuth]\n");
 	}
-	else 
+	else
 	{
 		co_await replaySelectMethod(client, (uint8_t)socks5Method::Error);
 		printf("选择认证模式: [Error]\n");
@@ -769,12 +770,13 @@ int main()
 	co_spawn(ctx, listener(11808), detached);
 
 	//多线程转发数据
-	std::thread([&]() {ctx.run(); }).detach();
-	std::thread([&]() {ctx.run(); }).detach();
-	std::thread([&]() {ctx.run(); }).detach();
-	std::thread([&]() {ctx.run(); }).detach();
-	std::thread([&]() {ctx.run(); }).detach();
-	std::thread([&]() {ctx.run(); }).detach();
-	
-	system("pause");
+	//std::thread([&]() {ctx.run(); }).detach();
+	//std::thread([&]() {ctx.run(); }).detach();
+	//std::thread([&]() {ctx.run(); }).detach();
+	//std::thread([&]() {ctx.run(); }).detach();
+	//std::thread([&]() {ctx.run(); }).detach();
+	//std::thread([&]() {ctx.run(); }).detach();
+
+	std::cout << "running..." << std::endl;
+	ctx.run();
 }
