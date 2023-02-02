@@ -48,17 +48,20 @@
      ./bootstrap-vcpkg.sh
      ```
 
-3. 用vcpkg安装asio:x64-windows
+3. 用vcpkg安装asio
 
      ```bash
      ./vcpkg install asio:x64-linux
      ```
 
-1. 编译
+4. 编译
+
+   要找到asio的include目录
 
    ```bash
    g++ main.cpp -I /root/vcpkg/packages/asio_x64-linux/include/ -fcoroutines -std=c++20 -lpthread
    ```
+
 
 
 ## 已实现
